@@ -117,6 +117,35 @@ Plain-JSON debugging endpoints: `GET /health`, `GET /usage` (auth required).
 Disable or delete the `usage-bridge` scheduled task, then delete
 `%USERPROFILE%\usage-bridge`.
 
+## Related projects — and how this differs
+
+Quota / usage MCP servers do exist. What we could not find is another one
+built on OpenTokenUsage, or one designed for an agent running on a
+*different machine* than the PC that holds the sign-ins.
+
+- [agent-runway](https://github.com/jberdah/agent-runway) — the closest in
+  spirit: remaining quota and resets for Claude / Codex / Copilot / Gemini
+  CLI via CLI, skill and MCP, to judge whether work can start now. It reads
+  each provider's endpoints itself and is aimed at the same machine.
+- [tokenhud](https://github.com/ZhuoQiuMcgill/tokenhud) — terminal HUD plus
+  MCP server for Claude / Codex limits and cost history. Focused on
+  visibility and history, not on model routing.
+- [ai-usage-mcp](https://github.com/MohitBansal321/ai-usage-mcp) — local MCP
+  server + CLI for token / cost analysis and Pro / Max plan limits
+  (Claude / Codex / OpenCode).
+- [tokenmeter-tray](https://github.com/DDRG15/tokenmeter-tray) — tray
+  tracker with a read-only MCP server, mainly Claude / Codex.
+
+usage-bridge differs in three ways:
+
+1. **Source** — it relays OpenTokenUsage's already-aggregated quotas
+   (~17 providers, including Antigravity and Grok) instead of scraping each
+   provider itself.
+2. **Topology** — the agent reads it remotely over a private Tailscale
+   tailnet, so the agent and the sign-ins can live on different machines.
+3. **Purpose** — the output feeds an orchestrator's (e.g. T3 Code's) model
+   selection, not a dashboard a human watches.
+
 ## Credits
 
 - [OpenTokenUsage](https://www.poweruserz.dev/) by PowerUserZ (MIT) — the

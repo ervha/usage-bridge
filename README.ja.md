@@ -37,6 +37,14 @@ OpenTokenUsage と Tailscale の導入、トークン生成、tailnet アドレ�
 
 詳細は英語版 [README.md](README.md) と [SECURITY.md](SECURITY.md) を参照してください。
 
+## 近いプロジェクトとの違い
+
+残り枠を返す MCP は他にもあります（agent-runway、tokenhud、ai-usage-mcp、tokenmeter-tray など）。ただ、OpenTokenUsage を取得元にするもの、別マシンで動くエージェントが Tailscale 越しに読む前提のものは、調べた範囲では見つかりませんでした。違いは3点です。
+
+1. 取得元 — 各社を自前で叩かず、OpenTokenUsage が集約済みの枠（Antigravity や Grok を含む）を使う
+2. 構成 — サインインのある PC とエージェントが別マシンでもよい
+3. 目的 — 人間が見るダッシュボードではなく、T3 のモデル選択に渡すこと
+
 ## ライセンス
 
 MIT
