@@ -212,7 +212,7 @@ def handle_rpc(msg):
         return {"jsonrpc": "2.0", "id": mid, "result": {
             "protocolVersion": "2025-03-26",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "usage-bridge", "version": "1.0.0"}}}
+            "serverInfo": {"name": "usage-bridge", "version": "1.0.1"}}}
     if method == "notifications/initialized":
         return None
     if method == "ping":
@@ -358,7 +358,19 @@ def main():
                          "Auth is disabled — keep the bind on 127.0.0.1.\n")
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     sys.stderr.write(f"usage-bridge listening on {a.host}:{a.port} (upstream {UPSTREAM})\n")
-    sys.stderr.write(f"token source: {TOKEN_SOURCE}\n")
+        sys.stderr.write(f"token source: {TOKEN_SOURCE}\n")
+    if a.host not in ("127.0.0.1", "::1", "localhost", "0.0.0.0"):
+        # Also listen on loopback, whatever the main bind address is.
+        # The --pair command creates pairing codes through 127.0.0.1,
+        # and /pair/create accepts loopback callers only, so pairing
+        # needs a loopback listener even when the server is bound to a
+        # tailnet address (which is different for every user).
+        try:
+            loop = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
+            threading.Thread(target=loop.serve_forever, daemon=True).start()
+            sys.stderr.write(f"usage-bridge also listening on 127.0.0.1:{a.port} (local use, pairing)\n")
+        except OSError as e:
+            sys.stderr.write(f"WARNING: could not also listen on 127.0.0.1:{a.port}: {e}\n")
     srv.serve_forever()
 
 if __name__ == "__main__":
