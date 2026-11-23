@@ -30,6 +30,15 @@
 
 ## Token handling — hard rule
 
+- Get the token by pairing, not by asking for the token itself. Ask
+  the user to run `python usage_bridge.py --pair` on the PC (Windows:
+  `python ~\usage-bridge\usage_bridge.py --pair`) and send you the
+  8-character pairing code. It is valid for 10 minutes and single
+  use. Redeem it with `POST http://<PC tailnet IPv4>:8787/pair/redeem`
+  and body `{"code": "..."}`; store the returned token in your secret
+  store immediately. If the code fails, ask for a fresh one — codes
+  burn after a few wrong attempts, by design.
+
 - Never print the bridge token in chat, logs, files, commits, or
   screenshots. Keep it in your secret store and let your MCP client
   attach it.
