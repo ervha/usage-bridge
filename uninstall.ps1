@@ -1,11 +1,14 @@
 # usage-bridge uninstaller for Windows (PowerShell)
 # 1) Stops the running server
 # 2) Removes the Startup-folder autostart entry
-# 3) Deletes %USERPROFILE%\usage-bridge (including token.txt)
+# 3) Deletes the install folder (including token.txt)
+#    Default %USERPROFILE%\usage-bridge; if you installed elsewhere,
+#    pass the same folder with -Dest <path>.
 # No admin rights needed. OpenTokenUsage / Tailscale are NOT removed;
 # uninstall them separately via winget or Windows Settings if you want.
+param([string]$Dest = (Join-Path $env:USERPROFILE "usage-bridge"))
 $ErrorActionPreference = "Continue"
-$dest = Join-Path $env:USERPROFILE "usage-bridge"
+$dest = $Dest
 
 # 1) Stop the server
 Get-CimInstance Win32_Process -Filter "Name like 'python%'" -ErrorAction SilentlyContinue |
