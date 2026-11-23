@@ -62,6 +62,20 @@ Your AI agent / orchestrator (e.g. T3 Code)
   reads remaining quota → picks the model → starts the thread
 ```
 
+**The server part, plainly.** The only program this project adds is
+`usage_bridge.py`, and it plays the server role. It runs on your own PC
+(in `~/usage-bridge`, started at logon) and waits for requests on port
+8787 at the PC's tailnet address. It exists because OpenTokenUsage's
+API answers only on the same PC (`127.0.0.1`), so an agent running on
+another machine cannot reach it directly — this program is the bridge
+between the two. When a request arrives, it checks the bearer token,
+asks OpenTokenUsage, and returns the answer (cached for 5 minutes).
+There is no cloud service and no third party: the token lives only in
+`token.txt` on the PC and in your agent's secret store, pairing codes
+exist only as a hash in the process's memory and disappear when it
+restarts, and if the PC is off or asleep, there is simply nothing to
+talk to.
+
 Example decisions an agent can make with this data:
 
 - “Argon has plenty left → use it for the first-pass review”
@@ -98,10 +112,13 @@ An agent with shell access can complete the whole setup. Steps:
    - Windows: `powershell -ExecutionPolicy Bypass -File .\install.ps1`
    - Linux / macOS: `sh ./install.sh`
 
-   It copies the server to `~/usage-bridge` (Windows:
-   `%USERPROFILE%\usage-bridge`), generates `token.txt` on first run
-   (later runs keep it), binds to the tailnet IPv4, registers autostart,
-   and health-checks the server.
+   It copies the server to the install folder — `~/usage-bridge` by
+   default (Windows: `%USERPROFILE%\usage-bridge`); a different folder
+   can be chosen (Windows: `-Dest <path>`; Linux / macOS:
+   `USAGE_BRIDGE_HOME=<path>`), and `token.txt` and the autostart
+   registration then live there too. It generates `token.txt` on first
+   run (later runs keep it), binds to the tailnet IPv4, registers
+   autostart, and health-checks the server.
 5. **Verify locally**: `GET http://<tailnet IPv4>:8787/health` must return
    `{"ok": true, "service": "usage-bridge"}`. If the installer bound to
    `127.0.0.1` instead, Tailscale sign-in is missing — fix that first.
@@ -168,7 +185,9 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 The installer:
 
 1. Installs OpenTokenUsage and Tailscale via `winget` if missing
-2. Copies `usage_bridge.py` to `%USERPROFILE%\usage-bridge`
+2. Copies `usage_bridge.py` to the install folder — `%USERPROFILE%\usage-bridge`
+   by default; pass `-Dest <path>` to choose another folder
+   (`uninstall.ps1` accepts the same `-Dest`)
 3. Generates a bearer token (`token.txt`, shown once — store it in a
    password manager / secure vault, never commit it, never share it
    publicly)
@@ -234,7 +253,9 @@ sh ./install.sh
 
 The installer:
 
-1. Copies `usage_bridge.py` to `~/usage-bridge`
+1. Copies `usage_bridge.py` to the install folder — `~/usage-bridge` by
+   default; set `USAGE_BRIDGE_HOME=<path>` to choose another folder
+   (`uninstall.sh` reads the same variable)
 2. Generates a bearer token (`token.txt`, mode `600`, shown once — store
    it in a password manager / secure vault, never commit it)
 3. Binds the server to your tailnet IPv4 (`100.x…`) — falling back to
@@ -335,9 +356,18 @@ one more moving part for little gain — skip it.
   10 minutes, single use, burned after 5 wrong guesses. Codes can only
   be created from the PC itself (loopback); redemption happens inside
   the tailnet and returns the token exactly once.
+- Know the trade-off. In exchange for the convenience, your usage
+  patterns (amounts, plan tiers, rough activity times) become readable
+  by anyone holding the token on your tailnet, a pairing code is
+  redeemable by whoever presents it within its 10-minute window, and
+  readings are only as reliable as OpenTokenUsage's undocumented local
+  API. [SECURITY.md](SECURITY.md) lists the risks in full — read it
+  before you install.
 - The bridge is **read-only**. It has no write tools.
 - Usage data stays between your PC and your agent. Nothing is sent to any
-  third-party service by this code.
+  third-party service by this code, and there is no telemetry or
+  phone-home of any kind — the only outbound calls are to OpenTokenUsage
+  on the same PC and to the agent that asked, inside your tailnet.
 - See [SECURITY.md](SECURITY.md) for the full notes.
 
 ## Limitations
