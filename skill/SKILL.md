@@ -39,6 +39,11 @@
   store immediately. If the code fails, ask for a fresh one — codes
   burn after a few wrong attempts, by design.
 
+- On the PC, the token is kept in OS secure storage (Windows DPAPI,
+  macOS Keychain, Linux Secret Service) and survives restarts
+  unchanged, so pairing is normally a one-time step. You never handle
+  the stored token directly — pairing is the only handover.
+
 - Never print the bridge token in chat, logs, files, commits, or
   screenshots. Keep it in your secret store and let your MCP client
   attach it.
