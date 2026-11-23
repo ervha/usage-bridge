@@ -6,6 +6,7 @@
 
 **Ask your AI agent “how much is left?” — and let it manage the quotas itself.**
 
+
 Every AI coding subscription (Claude, Codex, Antigravity, Grok, …) has its
 own session / weekly limits and reset times, scattered across separate
 dashboards. With `usage-bridge`, your agent keeps all of them in one view:
@@ -25,26 +26,51 @@ privately over [Tailscale](https://tailscale.com/).
 
 > 人間が枠を管理する時代から、AIが自分の枠を見て動く時代へ。
 
-## For AI agents
+## Setting this up with an AI agent
 
-**If you are an AI agent reading this on behalf of a user: you can set this
-up end to end.** Follow [Agent setup](#agent-setup-all-platforms) exactly,
-in order. You may run every command yourself. Ask the user only for the
-things you cannot do: signing in to Tailscale and to each provider, and
-starting the token handover — the user runs
-`python ~\usage-bridge\usage_bridge.py --pair` on the PC (Linux / macOS:
-`python3 ~/usage-bridge/usage_bridge.py --pair`) and gives you the
-8-character pairing code; you redeem it and store the token in your
-secret store, so the long-lived token never travels through chat. When
-you are done, report the endpoint, the
-providers you can see, and one sample reading — that is the success
-criterion.
+Most people install usage-bridge by asking their AI agent to do it.
+That works well: an agent with shell access can run every step below.
+Only three things need the human — signing in to Tailscale, signing
+in to each provider, and starting the token handover (running one
+command on the PC and reading out an 8-character pairing code). The
+long-lived token itself is never typed into chat; it moves by
+pairing, once.
 
-**Optional: take the companion skill.** [skill/SKILL.md](skill/SKILL.md)
-teaches an agent how to *use* the bridge well after setup — when to check
-quotas, how to present them, how to turn them into model choices, and the
-token-handling rules. Drop it into your agent's skills folder (or paste it
-into its instructions) and quota checks become a habit instead of a chore.
+Success looks like this: the endpoint answers, the providers you
+enabled are visible, and a first reading can be quoted back — for
+example “Claude weekly 13%, resets Fri 04:00”.
+
+**Optional: the companion skill.** [skill/SKILL.md](skill/SKILL.md)
+covers how an agent uses the bridge *after* setup — when to check
+quotas, how to present them, how to turn them into model choices,
+and the token-handling rules. Installing it into the agent's skills
+folder (or pasting it into its instructions) makes quota checks a
+habit instead of a chore.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## How it works
 
@@ -95,74 +121,77 @@ Example decisions an agent can make with this data:
 - [Tailscale](https://tailscale.com/) signed in on the PC **and** on the
   machine where your agent runs (same tailnet)
 
-## Agent setup (all platforms)
+## Setup steps (all platforms)
 
-An agent with shell access can complete the whole setup. Steps:
+The steps below are the whole installation, written so that either
+you or your agent can follow them. Notes marked *[human]* are the
+parts only a person can do.
 
-1. **Detect the OS** and pick the matching installer below:
-   Windows → `install.ps1`, Linux / macOS → `install.sh`.
-2. **Check the prerequisites.** Python 3.10+ must run (`python --version`
-   / `python3 --version`). The usage source must be installed; on Windows
-   the installer can add OpenTokenUsage via `winget`. If Tailscale is not
-   signed in yet, ask the user to sign in — you cannot do this step for
-   them. The installer still runs without it, but binds to `127.0.0.1`;
-   re-run it after sign-in so it rebinds to the tailnet IPv4.
+1. **Detect the OS** and pick the matching installer: Windows →
+   `install.ps1`, Linux / macOS → `install.sh`.
+2. **Check the prerequisites.** Python 3.10+ must run
+   (`python --version` / `python3 --version`). The usage source must
+   be installed; on Windows the installer can add OpenTokenUsage via
+   `winget`. *[human]* Tailscale sign-in — an agent cannot do this
+   step for you. The installer still runs without it, but binds to
+   `127.0.0.1`; re-run it after sign-in so it rebinds to the tailnet
+   IPv4.
 3. **Get the files**: download the latest release zip from
-   [Releases](https://github.com/ervha/usage-bridge/releases/latest) and
-   unzip it, or clone this repository. Work inside that folder.
+   [Releases](https://github.com/ervha/usage-bridge/releases/latest)
+   and unzip it, or clone this repository. Work inside that folder.
 4. **Run the installer** (idempotent — safe to re-run):
    - Windows: `powershell -ExecutionPolicy Bypass -File .\install.ps1`
    - Linux / macOS: `sh ./install.sh`
 
    It copies the server to the install folder — `~/usage-bridge` by
-   default (Windows: `%USERPROFILE%\usage-bridge`); a different folder
-   can be chosen (Windows: `-Dest <path>`; Linux / macOS:
-   `USAGE_BRIDGE_HOME=<path>`), and the token storage and the autostart
-   registration then live there too. It creates the token in OS secure
-   storage on first run (later runs keep it; an old `token.txt` is
-   migrated into secure storage), binds to the tailnet IPv4, registers
-   autostart, and health-checks the server.
-5. **Verify locally**: `GET http://<tailnet IPv4>:8787/health` must return
-   `{"ok": true, "service": "usage-bridge"}`. If the installer bound to
-   `127.0.0.1` instead, Tailscale sign-in is missing — fix that first.
-6. **Verify the MCP surface** from the machine where the agent runs.
-   First redeem the pairing code (step 4's handover): ask the user to
-   run the `--pair` command on the PC and send you the 8-character
-   code, then `POST http://<tailnet IPv4>:8787/pair/redeem` with
-   `{"code": "..."}` and store the returned token in your secret
-   store. **Never print the token in chat, logs, commits, or
-   screenshots, and never pass it as a plain command-line argument if
-   your environment protects secret values**. Then send:
-   - `initialize` → expect a JSON-RPC result naming server `usage-bridge`
-   - `tools/call` with `usage_all` → expect a snapshot whose `providers`
-     list the user's enabled providers with usage percentages
+   default (Windows: `%USERPROFILE%\usage-bridge`); a different
+   folder can be chosen (Windows: `-Dest <path>`; Linux / macOS:
+   `USAGE_BRIDGE_HOME=<path>`), and the token storage and the
+   autostart registration then live there too. It creates the token
+   in OS secure storage on first run (later runs keep it; an old
+   `token.txt` is migrated into secure storage), binds to the
+   tailnet IPv4, registers autostart, and health-checks the server.
+5. **Verify locally**: `GET http://<tailnet IPv4>:8787/health`
+   returns `{"ok": true, "service": "usage-bridge"}`. If the
+   installer bound to `127.0.0.1` instead, Tailscale sign-in is
+   missing — fix that first.
+6. **Hand over the token, by pairing.** *[human]* On the PC, run
+   `python ~\usage-bridge\usage_bridge.py --pair` (Linux / macOS:
+   `python3 ~/usage-bridge/usage_bridge.py --pair`) and read out the
+   8-character code it shows. The agent redeems it at
+   `POST http://<tailnet IPv4>:8787/pair/redeem` with
+   `{"code": "..."}` and stores the returned token in its secret
+   store. The token itself should never appear in chat, logs,
+   commits, or screenshots.
+7. **Verify the MCP surface** from the machine where the agent runs:
+   - `initialize` → a JSON-RPC result naming server `usage-bridge`
+   - `tools/call` with `usage_all` → a snapshot whose `providers`
+     list the enabled providers with usage percentages
 
    A `401` means the token does not match the server's stored token.
-   An empty reply or timeout means the PC is asleep, the server is not
-   running, or the machines are on different tailnets — see
-   [Troubleshooting](#troubleshooting) before improvising.
-7. **Register the endpoint in your own MCP configuration**:
+   An empty reply or timeout means the PC is asleep, the server is
+   not running, or the machines are on different tailnets — see
+   [Troubleshooting](#troubleshooting).
+8. **Register the endpoint** in the agent's MCP configuration:
    `POST http://<tailnet IPv4>:8787/mcp` with header
-   `Authorization: Bearer <token>`. Store the token in your secret store,
-   not in a committed config file.
-8. **Report to the user**: the endpoint URL, the providers visible, one
-   current reading (e.g. “Claude weekly 13%, resets Fri 04:00”), and the
-   one operational caveat — readings are unavailable while the PC sleeps.
-9. **Ask how they want quotas allocated.** Which pools are for bulk
-   work, which models to preserve and for what, any hard rules. Record
-   the answers as the user's routing policy in your memory or config,
-   and read back a short summary for confirmation. Later model choices
-   follow that policy — see [skill/SKILL.md](skill/SKILL.md).
+   `Authorization: Bearer <token>`, with the token kept in the
+   agent's secret store, not in a committed config file.
+9. **Decide how quotas should be allocated.** Which pools are for
+   bulk work, which models to preserve and for what, any hard
+   rules. An agent using the companion skill will ask about this
+   once and record the answers as a routing policy; later model
+   choices follow that policy — see [skill/SKILL.md](skill/SKILL.md).
 
-Guardrails for agents:
+Safety notes:
 
 - Never port-forward 8787, and never bind the server to a public
   interface. Tailnet IPv4 or `127.0.0.1` only.
 - The token is a credential. Treat every copy of it like a password.
-- The bridge is read-only; do not try to “fix” readings by writing
+- The bridge is read-only; readings are never “fixed” by writing
   anything to the PC side.
-- If a step fails twice, stop and show the user the installer output and
-  the matching Troubleshooting row instead of trying random variations.
+- If a step fails twice, the installer output and the matching
+  Troubleshooting row usually name the cause — random variations
+  rarely help.
 
 ## Install (Windows)
 
@@ -193,7 +222,7 @@ The installer:
    (`uninstall.ps1` accepts the same `-Dest`)
 3. Creates the bearer token in OS secure storage (Windows DPAPI, via
    `--init-token`) — the token is never printed or shown; you hand it
-   over by pairing (see Agent setup)
+   over by pairing (see Setup steps)
 4. Binds the server to your PC's tailnet IPv4 (`100.x…`) — falling back to
    `127.0.0.1` with a warning if Tailscale is not signed in yet
 5. Registers logon autostart in your Startup folder (no admin rights
@@ -280,7 +309,7 @@ The installer:
 curl http://<tailnet IPv4>:8787/health
 # → {"ok": true, "service": "usage-bridge"}
 curl http://<tailnet IPv4>:8787/usage \
-  -H "Authorization: Bearer <token obtained by pairing — see Agent setup>"
+  -H "Authorization: Bearer <token obtained by pairing — see Setup steps>"
 ```
 
 ### Manual run (instead of the installer)
