@@ -18,6 +18,37 @@ Treat it like any other internal service:
   never reads, stores, or forwards those credentials; it only relays the
   aggregated usage JSON from the local API.
 
+## Risks you accept by using this
+
+- **Your usage patterns become queryable on your tailnet.** The data is
+  amounts and reset times — not credentials, prompts, or code — but it
+  does reveal which subscriptions you pay for, your plan tiers, and
+  roughly when you are active. Anyone who obtains the token can read it
+  until you rotate the token.
+- **Every device on your tailnet can reach the server.** A compromised
+  device still needs the token to read usage data, but the
+  unauthenticated `/health` endpoint tells it that the service exists
+  and the PC is awake. Only put devices you trust on the tailnet.
+- **Pairing has a 10-minute window.** During it, someone who learns the
+  code *and* is on your tailnet could redeem it first and receive the
+  token. Codes are single-use, burn after 5 wrong guesses, and can only
+  be created on the PC itself — but do not post a live code publicly.
+- **The token sits on disk** (`token.txt`; mode 600 on Linux / macOS,
+  user-profile ACLs on Windows). Malware already running as your user
+  could read it — though at that point it could also read OpenTokenUsage
+  directly. Rotate the token if you suspect a local compromise.
+- **Readings are only as good as an undocumented API.** OpenTokenUsage's
+  local API is not a public contract; an app update could change its
+  shape and produce wrong (not just stale) readings, and an agent
+  routing models on wrong numbers will make wrong choices.
+  Sanity-check surprising readings against the tray app.
+- **What the agent reads enters the agent's world.** Quota snapshots may
+  end up in your agent's conversation history or logs, wherever those
+  are stored.
+- **It runs at every logon until uninstalled.** The autostart entry
+  keeps the server reachable whenever the PC is on. Uninstalling
+  removes the server, the autostart entry, and the token file.
+
 ## Where things live
 
 - The “server” is the `usage_bridge.py` process on your own PC — there is
