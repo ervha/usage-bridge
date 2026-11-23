@@ -22,7 +22,14 @@ if [ "$OS" = "Darwin" ]; then
 fi
 
 pkill -f "usage_bridge.py" 2>/dev/null || true
+# The token may also live in OS secure storage, outside $DEST — remove it too.
+if [ "$OS" = "Darwin" ]; then
+  security delete-generic-password -s usage-bridge -a token >/dev/null 2>&1 || true
+fi
+if command -v secret-tool >/dev/null 2>&1; then
+  secret-tool clear service usage-bridge account token >/dev/null 2>&1 || true
+fi
 rm -rf "$DEST"
-echo "Removed $DEST (including token.txt)."
+echo "Removed $DEST and the stored token (secure storage / token.txt)."
 echo "Done. If the provider app (OpenTokenUsage / OpenUsage) is no longer needed,"
 echo "uninstall it separately; this script does not touch it."
