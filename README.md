@@ -464,8 +464,10 @@ configuration, as in step 4 below. To do it by hand instead:
 | Installer warns “Tailscale IPv4 not found” | Tailscale is not signed in yet. Sign in, then re-run the installer so it rebinds to the tailnet address. |
 | `401 unauthorized` from the agent | Token mismatch. The token lives in OS secure storage, not a readable file — re-pair: run `--pair` on the PC and redeem the fresh code. |
 | Agent gets an empty reply | Fixed in v1.0.0: windowless (`pythonw`) startup no longer breaks responses. Make sure you are not running an older copy — re-run the installer. |
+| `--pair` fails with “connection refused” | Fixed in v1.0.1: when the server is bound to a tailnet address it now also listens on 127.0.0.1, which is where `--pair` connects. Re-run the installer from the latest release. |
 | `OpenTokenUsage local API unreachable` | OpenTokenUsage is not running, or no provider is enabled. Open it once and check its tray icon. |
 | Nothing answers at all | The PC is asleep/off, or the agent is on a different tailnet. Wake the PC and check `tailscale status` on both machines. |
+
 
 ## Related projects — and how this differs
 
