@@ -47,7 +47,22 @@ Example decisions an agent can make with this data:
 - [Tailscale](https://tailscale.com/) signed in on the PC **and** on the
   machine where your agent runs (same tailnet)
 
-## Quick start (Windows)
+## Install (Windows)
+
+### 0. Before you start
+
+- Sign in to **Tailscale** on this PC first, and note its tailnet IPv4
+  (`tailscale ip -4`, a `100.x…` address). If you run the installer before
+  signing in, it falls back to `127.0.0.1` — just sign in and run it again.
+- Make sure `python --version` (or `py --version`) works in PowerShell.
+
+### 1. Get the files
+
+Download `usage-bridge-v1.0.0.zip` from the
+[latest release](https://github.com/ervha/usage-bridge/releases/latest)
+and unzip it (or clone this repository). Open PowerShell in that folder.
+
+### 2. Run the installer
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -58,7 +73,8 @@ The installer:
 1. Installs OpenTokenUsage and Tailscale via `winget` if missing
 2. Copies `usage_bridge.py` to `%USERPROFILE%\usage-bridge`
 3. Generates a bearer token (`token.txt`, shown once — store it in a
-   password manager / secure vault, never commit it)
+   password manager / secure vault, never commit it, never share it
+   publicly)
 4. Binds the server to your PC's tailnet IPv4 (`100.x…`) — falling back to
    `127.0.0.1` with a warning if Tailscale is not signed in yet
 5. Registers logon autostart in your Startup folder (no admin rights
@@ -66,14 +82,41 @@ The installer:
    `GET /health`. Re-running the installer first stops any older
    usage-bridge process, so a stale copy cannot keep holding port 8787.
 
-Then, in OpenTokenUsage, enable the providers you use and confirm they are
-signed in.
+### 3. Enable your providers
 
-Manual run:
+Open OpenTokenUsage once, enable the providers you use (Claude / Codex /
+Antigravity / Grok / …) and confirm each one is signed in. The bridge can
+only relay what OpenTokenUsage can see.
+
+### 4. Verify
+
+```powershell
+# Health (no auth needed) — use your own tailnet IPv4:
+Invoke-RestMethod http://<tailnet IPv4>:8787/health
+# → {"ok": true, "service": "usage-bridge"}
+
+# Usage (auth required):
+$token = Get-Content ~\usage-bridge\token.txt
+Invoke-RestMethod http://<tailnet IPv4>:8787/usage -Headers @{ Authorization = "Bearer $token" }
+```
+
+From the agent's machine, repeat the health check to confirm the tailnet
+path works end to end. A `401` on `/usage` means the token does not match;
+a timeout means the PC is asleep, the server is not running, or the two
+machines are not on the same tailnet.
+
+### Manual run (instead of the installer)
 
 ```powershell
 python usage_bridge.py --host 127.0.0.1 --port 8787
 ```
+
+## Updating
+
+Download the new release zip, unzip it, and run `install.ps1` again.
+Your existing `token.txt` is kept, the old server process is stopped
+first, and autostart is re-registered against your current tailnet IPv4.
+No other state is stored, so there is nothing to migrate.
 
 ## Connecting an MCP client
 
@@ -117,8 +160,36 @@ Plain-JSON debugging endpoints: `GET /health`, `GET /usage` (auth required).
 
 ## Uninstall
 
-Remove `usage-bridge.cmd` from your Startup folder, stop any running
-`usage_bridge.py` process, then delete `%USERPROFILE%\usage-bridge`.
+1. Stop the running server:
+
+   ```powershell
+   Get-CimInstance Win32_Process -Filter "Name like 'python%'" |
+     Where-Object { $_.CommandLine -like "*usage_bridge.py*" } |
+     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+   ```
+
+2. Remove the autostart entry: delete `usage-bridge.cmd` from your
+   Startup folder (`shell:startup` in Explorer's address bar opens it).
+3. Delete the install folder: `%USERPROFILE%\usage-bridge`
+   (this also deletes `token.txt` — the token is then useless to anyone,
+   because the server is gone).
+4. Remove the MCP entry / endpoint from your agent's configuration, so
+   the agent stops trying to reach the bridge.
+5. Optional, only if you installed them for this: uninstall
+   OpenTokenUsage and Tailscale via `winget uninstall` or Windows
+   Settings. Nothing else was installed and no registry settings are
+   left behind by usage-bridge itself.
+
+## Troubleshooting
+
+| Symptom | Likely cause / fix |
+|---|---|
+| Health check fails right after install | Python not on PATH, or port 8787 already in use. Re-run the installer (it stops older usage-bridge processes first). |
+| Installer warns “Tailscale IPv4 not found” | Tailscale is not signed in yet. Sign in, then re-run the installer so it rebinds to the tailnet address. |
+| `401 unauthorized` from the agent | Token mismatch. Use the exact contents of `%USERPROFILE%\usage-bridge\token.txt` as the Bearer token. |
+| Agent gets an empty reply | Fixed in v1.0.0: windowless (`pythonw`) startup no longer breaks responses. Make sure you are not running an older copy — re-run the installer. |
+| `OpenTokenUsage local API unreachable` | OpenTokenUsage is not running, or no provider is enabled. Open it once and check its tray icon. |
+| Nothing answers at all | The PC is asleep/off, or the agent is on a different tailnet. Wake the PC and check `tailscale status` on both machines. |
 
 ## Related projects — and how this differs
 

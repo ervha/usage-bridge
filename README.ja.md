@@ -17,11 +17,64 @@ OpenTokenUsage（ローカルAPI 127.0.0.1:6736/v1/usage）
 
 ## 導入（Windows）
 
+### 0. 事前準備
+
+- 先に Tailscale へサインインし、`tailscale ip -4` で tailnet IPv4（100.x…）を確認してください。サインイン前に導入すると `127.0.0.1` のみの待ち受けになるので、その場合はサインイン後に導入をやり直してください。
+- PowerShell で `python --version`（または `py --version`）が通ることを確認してください。
+
+### 1. ファイルの取得
+
+最新リリースから `usage-bridge-v1.0.0.zip` をダウンロードして展開し、そのフォルダで PowerShell を開いてください。
+
+### 2. インストーラの実行
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-OpenTokenUsage と Tailscale の導入、トークン生成、tailnet アドレスへの待ち受け設定、自動起動の登録、ヘルスチェックまで一括で行います。表示されるトークンは金庫など安全な場所に保管し、リポジトリには絶対に入れないでください。
+OpenTokenUsage と Tailscale の導入、サーバーの配置（`%USERPROFILE%\usage-bridge`）、トークン生成、tailnet アドレスへの待ち受け設定、スタートアップフォルダへの自動起動登録（管理者権限不要、pythonw で窓なし起動）、ヘルスチェックまで一括で行います。再実行時は古いサーバープロセスを先に止めるので、古い版がポート8787を掴んだままになることはありません。表示されるトークンは金庫など安全な場所に保管し、リポジトリや公開の場には絶対に出さないでください。
+
+### 3. プロバイダの有効化
+
+OpenTokenUsage を一度開き、使うプロバイダ（Claude / Codex / Antigravity / Grok など）を有効化して、サインイン状態を確認してください。
+
+### 4. 動作確認
+
+```powershell
+Invoke-RestMethod http://<tailnet IPv4>:8787/health
+# → {"ok": true, "service": "usage-bridge"}
+
+$token = Get-Content ~\usage-bridge\token.txt
+Invoke-RestMethod http://<tailnet IPv4>:8787/usage -Headers @{ Authorization = "Bearer $token" }
+```
+
+エージェント側のマシンからも `/health` が返れば、経路まで完成です。`/usage` で 401 になる場合はトークンの不一致、タイムアウトする場合は PC のスリープ、サーバー未起動、tailnet の不一致を疑ってください。
+
+## 更新
+
+新しいリリースの zip を展開して `install.ps1` を再実行するだけです。`token.txt` は保持され、古いプロセスの停止と自動起動の再登録まで自動で行われます。保存される状態は他にないので、移行作業はありません。
+
+## 削除（アンインストール）
+
+1. サーバープロセスを止めます。
+
+   ```powershell
+   Get-CimInstance Win32_Process -Filter "Name like 'python%'" |
+     Where-Object { $_.CommandLine -like "*usage_bridge.py*" } |
+     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+   ```
+
+2. スタートアップフォルダ（エクスプローラのアドレスバーで `shell:startup`）から `usage-bridge.cmd` を削除します。
+3. `%USERPROFILE%\usage-bridge` フォルダを削除します（`token.txt` も一緒に消えます）。
+4. エージェント側の設定から、この MCP のエンドポイントを削除します。
+5. 必要な場合のみ、OpenTokenUsage と Tailscale を Windows の設定や `winget uninstall` で削除してください。usage-bridge 自体はレジストリ等に何も残しません。
+
+## トラブルシュート
+
+- ヘルスチェックが失敗する → Python が PATH に無い、またはポート8787が使用中。再実行で古いプロセスは止まります。
+- 「Tailscale IPv4 not found」と出る → Tailscale 未サインイン。サインイン後に再実行してください。
+- エージェントから空の応答が返る → v1.0.0 で修正済み（pythonw 起動時の不具合）。古いコピーが動いていないか確認し、インストーラを再実行してください。
+- 「OpenTokenUsage local API unreachable」と出る → OpenTokenUsage が起動していない、またはプロバイダが未有効化です。
 
 ## ツール
 
