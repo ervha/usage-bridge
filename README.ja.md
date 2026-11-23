@@ -2,7 +2,7 @@
 
 [English README](README.md)
 
-[ダウンロード](https://github.com/ervha/usage-bridge/releases/latest) · [変更履歴](CHANGELOG.md) · [問題を報告](https://github.com/ervha/usage-bridge/issues)
+[ダウンロード](https://github.com/ervha/usage-bridge-for-agents/releases/latest) · [変更履歴](CHANGELOG.md) · [問題を報告](https://github.com/ervha/usage-bridge-for-agents/issues)
 
 **AIエージェントに聞くだけで、各種サブスクの「残りトークン」をまとめて管理できる。**
 
