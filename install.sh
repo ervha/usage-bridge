@@ -1,6 +1,7 @@
 #!/bin/sh
 # usage-bridge installer for Linux / macOS
-# 1) Copies usage_bridge.py to ~/usage-bridge
+# 1) Copies usage_bridge.py to the install folder
+#    (default ~/usage-bridge; choose another by setting USAGE_BRIDGE_HOME)
 # 2) Generates a bearer token (token.txt, mode 600, shown once at the end)
 # 3) Registers autostart (systemd --user on Linux, launchd on macOS)
 # 4) Starts the server and checks /health
@@ -8,7 +9,8 @@
 set -eu
 
 SRC_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-DEST="$HOME/usage-bridge"
+DEST="${USAGE_BRIDGE_HOME:-$HOME/usage-bridge}"
+echo "Installing usage-bridge to $DEST"
 PORT=8787
 mkdir -p "$DEST"
 
@@ -123,4 +125,4 @@ echo ""
 echo "Next steps:"
 echo " 1) Make sure the usage provider app (OpenTokenUsage / OpenUsage) is running and signed in."
 echo " 2) Make sure Tailscale is signed in on this machine (same account as your agent)."
-echo " 3) Tell your agent this machine's tailnet IPv4 (run: tailscale ip -4) and the token above."
+echo " 3) Hand the token over securely: run  python3 \"$DEST/usage_bridge.py\" --pair  and give your agent the 8-character pairing code (valid 10 minutes, single use) plus this machine's tailnet IPv4 (tailscale ip -4). The agent redeems the code for the token, so the token itself never travels."
