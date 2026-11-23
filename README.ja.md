@@ -171,6 +171,7 @@ Windows では `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1` を実
 - ヘルスチェックが失敗する → Python が PATH に無い、またはポート8787が使用中。再実行で古いプロセスは止まります。
 - 「Tailscale IPv4 not found」と出る → Tailscale 未サインイン。サインイン後に再実行してください。
 - エージェントから空の応答が返る → v1.0.0 で修正済み（pythonw 起動時の不具合）。古いコピーが動いていないか確認し、インストーラを再実行してください。
+- `--pair` が「接続を拒否されました」になる → v1.0.1 で修正済み（tailnet アドレスに bind したときも、`--pair` の接続先である 127.0.0.1 で待ち受けるようになった）。最新リリースのインストーラを再実行してください。
 - 「OpenTokenUsage local API unreachable」と出る → OpenTokenUsage が起動していない、またはプロバイダが未有効化です。
 
 ## ツール
