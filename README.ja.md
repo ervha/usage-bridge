@@ -66,7 +66,7 @@ OpenTokenUsage（ローカルAPI 127.0.0.1:6736/v1/usage）
 
 ### 1. ファイルの取得
 
-最新リリースから `usage-bridge-v1.0.0.zip` をダウンロードして展開し、そのフォルダで PowerShell を開いてください。
+最新リリースから `usage-bridge-v1.0.1.zip` をダウンロードして展開し、そのフォルダで PowerShell を開いてください。
 
 ### 2. インストーラの実行
 
