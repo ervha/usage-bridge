@@ -26,7 +26,7 @@ OpenTokenUsage（ローカルAPI 127.0.0.1:6736/v1/usage）
   → AIエージェントが残量を読んで、使うモデルを自動判断
 ```
 
-**サーバー部分について。** このプロジェクトが追加するプログラムは `usage_bridge.py` の1つだけで、これがサーバーの役目をします。自分の PC（`~/usage-bridge`）の中でログオン時に起動し、PC の tailnet アドレスの8787番ポートで要求を待ち受けます。なぜ要るかというと、OpenTokenUsage の API は同じ PC の中からしか読めない（127.0.0.1）ので、別マシンで動くエージェントが直接届かないからです。このプログラムが、その間の橋渡しをします。要求が来たら、トークンを確認し、OpenTokenUsage へ聞いて、答えを返します（5分キャッシュ）。クラウドのサービスではなく、第三者も挟まりません。トークンがあるのは PC の `token.txt` とエージェントの秘密ストアだけで、ペアリングコードはプロセスのメモリ内にハッシュとしてだけ存在し、再起動で消えます。PC が止まっていれば、話しかける相手自体が存在しません。
+**サーバー部分について。** このプロジェクトが追加するプログラムは `usage_bridge.py` の1つだけで、これがサーバーの役目をします。自分の PC（`~/usage-bridge`）の中でログオン時に起動し、PC の tailnet アドレスの8787番ポートで要求を待ち受けます。なぜ要るかというと、OpenTokenUsage の API は同じ PC の中からしか読めない（127.0.0.1）ので、別マシンで動くエージェントが直接届かないからです。このプログラムが、その間の橋渡しをします。要求が来たら、トークンを確認し、OpenTokenUsage へ聞いて、答えを返します（5分キャッシュ）。クラウドのサービスではなく、第三者も挟まりません。トークンがあるのは PC の OS の安全な保管場所（Windows は DPAPI、macOS はキーチェーン、Linux は Secret Service）とエージェントの秘密ストアだけで、ペアリングコードはプロセスのメモリ内にハッシュとしてだけ存在し、再起動で消えます。PC が止まっていれば、話しかける相手自体が存在しません。
 
 ## エージェントによるセットアップ（全OS共通）
 
@@ -35,7 +35,7 @@ OpenTokenUsage（ローカルAPI 127.0.0.1:6736/v1/usage）
 1. **OSを判定**し、インストーラを選びます。Windows は `install.ps1`、Linux / macOS は `install.sh` です。
 2. **前提を確認**します。Python 3.10+ が動くこと。使用量の取得元が入っていること（Windows ではインストーラが OpenTokenUsage を winget で追加できます）。Tailscale が未サインインなら、ここだけユーザーに頼んでください。未サインインのまま導入すると `127.0.0.1` のみの待ち受けになるので、サインイン後にインストーラを再実行して tailnet アドレスへ張り替えます。
 3. **ファイルを取得**します。最新リリースの zip を展開するか、このリポジトリを clone して、そのフォルダで作業します。
-4. **インストーラを実行**します（冪等。再実行して構いません）。サーバーの配置（既定は `~/usage-bridge`、Windows は `%USERPROFILE%\usage-bridge`。変更もできて、Windows は `-Dest <path>`、Linux / macOS は `USAGE_BRIDGE_HOME=<path>` で指定します。その場合 `token.txt` や自動起動の登録もそのフォルダ側になります）、トークン生成（初回のみ。以後は保持）、tailnet アドレスへの待ち受け、自動起動の登録、ヘルスチェックまで行われます。
+4. **インストーラを実行**します（冪等。再実行して構いません）。サーバーの配置（既定は `~/usage-bridge`、Windows は `%USERPROFILE%\usage-bridge`。変更もできて、Windows は `-Dest <path>`、Linux / macOS は `USAGE_BRIDGE_HOME=<path>` で指定します。その場合トークンの保管場所や自動起動の登録もそのフォルダ側になります）、トークンの作成（初回のみ OS の安全な保管場所へ。以後は保持され、古い `token.txt` があれば安全な保管場所へ移行します）、tailnet アドレスへの待ち受け、自動起動の登録、ヘルスチェックまで行われます。
 5. **ローカルで確認**します。`GET http://<tailnet IPv4>:8787/health` が `{"ok": true, "service": "usage-bridge"}` を返すこと。`127.0.0.1` に張られている場合は Tailscale のサインイン不足です。先にそちらを直してください。
 6. **エージェント側のマシンから MCP を確認**します。先にペアリングでトークンを受け取ります。ユーザーに PC で `python ~\usage-bridge\usage_bridge.py --pair`（Linux / macOS は `python3 ~/usage-bridge/usage_bridge.py --pair`）を実行してもらい、8文字のペアリングコードを受け取って、`POST http://<tailnet IPv4>:8787/pair/redeem` に `{"code": "..."}` を送り、返ってきたトークンを秘密ストアに保管します。コードは10分有効・1回限りで、間違いが続くと失効します。長期トークン自体をチャットで送らせないでください。**チャット、ログ、コミット、スクリーンショットにトークンを出さないでください。秘密値の保護が働く環境では、コマンドライン引数に生のトークンを載せないでください。** 確認するのは2つです。
    - `initialize` でサーバー名 `usage-bridge` の応答が返ること
@@ -70,7 +70,7 @@ OpenTokenUsage（ローカルAPI 127.0.0.1:6736/v1/usage）
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-OpenTokenUsage と Tailscale の導入、サーバーの配置（既定は `%USERPROFILE%\usage-bridge`。`-Dest <path>` で変更でき、アンインストーラも同じ `-Dest` を受けます）、トークン生成、tailnet アドレスへの待ち受け設定、スタートアップフォルダへの自動起動登録（管理者権限不要、pythonw で窓なし起動）、ヘルスチェックまで一括で行います。再実行時は古いサーバープロセスを先に止めるので、古い版がポート8787を掴んだままになることはありません。表示されるトークンは金庫など安全な場所に保管し、リポジトリや公開の場には絶対に出さないでください。
+OpenTokenUsage と Tailscale の導入、サーバーの配置（既定は `%USERPROFILE%\usage-bridge`。`-Dest <path>` で変更でき、アンインストーラも同じ `-Dest` を受けます）、トークンの作成（`--init-token` で Windows DPAPI の安全な保管場所へ。トークン自体は表示されません）、tailnet アドレスへの待ち受け設定、スタートアップフォルダへの自動起動登録（管理者権限不要、pythonw で窓なし起動）、ヘルスチェックまで一括で行います。再実行時は古いサーバープロセスを先に止めるので、古い版がポート8787を掴んだままになることはありません。トークンの受け渡しはペアリングで行います（エージェント向け手順を参照）。
 
 ### 3. プロバイダの有効化
 
@@ -82,8 +82,11 @@ OpenTokenUsage を一度開き、使うプロバイダ（Claude / Codex / Antigr
 Invoke-RestMethod http://<tailnet IPv4>:8787/health
 # → {"ok": true, "service": "usage-bridge"}
 
-$token = Get-Content ~\usage-bridge\token.txt
-Invoke-RestMethod http://<tailnet IPv4>:8787/usage -Headers @{ Authorization = "Bearer $token" }
+# 認証ありの確認: トークンは OS の安全な保管場所にあり、読めるファイルには
+# ありません。エージェントと同じくペアリングで受け取ってください
+#   python ~\usage-bridge\usage_bridge.py --pair   でコードを発行し、
+#   POST /pair/redeem に {"code": "..."} を送るとトークンが1回だけ返ります。
+# 受け取ったトークンを Authorization: Bearer <token> として /usage を呼びます。
 ```
 
 エージェント側のマシンからも `/health` が返れば、経路まで完成です。`/usage` で 401 になる場合はトークンの不一致、タイムアウトする場合は PC のスリープ、サーバー未起動、tailnet の不一致を疑ってください。
@@ -104,7 +107,7 @@ Invoke-RestMethod http://<tailnet IPv4>:8787/usage -Headers @{ Authorization = "
 sh ./install.sh
 ```
 
-サーバーの配置（既定は `~/usage-bridge`。`USAGE_BRIDGE_HOME=<path>` で変更でき、アンインストーラも同じ変数を見ます）、トークン生成（`token.txt`、権限600、表示は1回だけ。金庫など安全な場所に保管し、公開の場に出さないでください）、tailnet アドレスへの待ち受け設定、自動起動の登録（Linux は systemd ユーザーサービス、macOS は launchd エージェント）、ヘルスチェックまで一括で行います。再実行時は古いサーバープロセスを先に止めます。
+サーバーの配置（既定は `~/usage-bridge`。`USAGE_BRIDGE_HOME=<path>` で変更でき、アンインストーラも同じ変数を見ます）、トークンの作成（`--init-token` で OS の安全な保管場所へ。macOS はキーチェーン、Linux は Secret Service、無い環境では `token.txt` 権限600に fallback。トークン自体は表示されません）、tailnet アドレスへの待ち受け設定、自動起動の登録（Linux は systemd ユーザーサービス、macOS は launchd エージェント）、ヘルスチェックまで一括で行います。再実行時は古いサーバープロセスを先に止めます。
 
 ### 2. 動作確認
 
@@ -112,12 +115,12 @@ sh ./install.sh
 curl http://<tailnet IPv4>:8787/health
 # → {"ok": true, "service": "usage-bridge"}
 curl http://<tailnet IPv4>:8787/usage \
-  -H "Authorization: Bearer $(cat ~/usage-bridge/token.txt)"
+  -H "Authorization: Bearer <ペアリングで受け取ったトークン>"
 ```
 
 ## 更新
 
-新しいリリースの zip を展開して、インストーラ（Windows は `install.ps1`、Linux / macOS は `install.sh`）を再実行するだけです。`token.txt` は保持され、古いプロセスの停止と自動起動の再登録まで自動で行われます。保存される状態は他にないので、移行作業はありません。
+新しいリリースの zip を展開して、インストーラ（Windows は `install.ps1`、Linux / macOS は `install.sh`）を再実行するだけです。トークンは保持され（古い `token.txt` は安全な保管場所へ移行されます）、古いプロセスの停止と自動起動の再登録まで自動で行われます。保存される状態は他にないので、移行作業はありません。
 
 ## 削除（アンインストール）
 
@@ -134,7 +137,7 @@ Windows では `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1` を実
    ```
 
 2. スタートアップフォルダ（エクスプローラのアドレスバーで `shell:startup`）から `usage-bridge.cmd` を削除します。
-3. `%USERPROFILE%\usage-bridge` フォルダを削除します（`token.txt` も一緒に消えます）。
+3. `%USERPROFILE%\usage-bridge` フォルダを削除します（DPAPIで暗号化されたトークンファイルも一緒に消えます）。
 4. エージェント側の設定から、この MCP のエンドポイントを削除します。
 5. 必要な場合のみ、OpenTokenUsage と Tailscale を Windows の設定や `winget uninstall` で削除してください。usage-bridge 自体はレジストリ等に何も残しません。
 
