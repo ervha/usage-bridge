@@ -1,9 +1,11 @@
 #!/bin/sh
 # usage-bridge uninstaller for Linux / macOS
-# Stops the server, removes the autostart registration and ~/usage-bridge.
+# Stops the server, removes the autostart registration and the install folder.
+# Default ~/usage-bridge; if you installed elsewhere, set USAGE_BRIDGE_HOME
+# to the same folder you used at install time.
 set -eu
 
-DEST="$HOME/usage-bridge"
+DEST="${USAGE_BRIDGE_HOME:-$HOME/usage-bridge}"
 OS=$(uname -s)
 
 if [ "$OS" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
