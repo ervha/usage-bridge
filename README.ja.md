@@ -2,8 +2,6 @@
 
 [English README](README.md)
 
-![release](https://img.shields.io/github/v/release/ervha/usage-bridge) ![downloads](https://img.shields.io/github/downloads/ervha/usage-bridge/total) ![license](https://img.shields.io/github/license/ervha/usage-bridge)
-
 [ダウンロード](https://github.com/ervha/usage-bridge/releases/latest) · [変更履歴](CHANGELOG.md) · [問題を報告](https://github.com/ervha/usage-bridge/issues)
 
 **AIエージェントに聞くだけで、各種サブスクの「残りトークン」をまとめて管理できる。**
