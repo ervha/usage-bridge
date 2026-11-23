@@ -2,7 +2,8 @@
 # 1) Installs OpenTokenUsage if missing (winget)
 # 2) Copies usage_bridge.py to the install folder
 #    (default %USERPROFILE%\usage-bridge; choose another with -Dest <path>)
-# 3) Generates a bearer token (token.txt, shown once at the end — send it to your AI agent)
+# 3) Creates the bearer token in OS secure storage (Windows DPAPI;
+#    the token itself is never printed — hand it over with pairing)
 # 4) Registers logon autostart via the Startup folder (no admin rights needed)
 # 5) Starts the server and checks /health
 param([string]$Dest = (Join-Path $env:USERPROFILE "usage-bridge"))
@@ -21,16 +22,15 @@ if (-not $otu) {
 # 2) Server file
 Copy-Item (Join-Path $PSScriptRoot "usage_bridge.py") (Join-Path $dest "usage_bridge.py") -Force
 
-# 3) Token
-$tokenFile = Join-Path $dest "token.txt"
-if (-not (Test-Path $tokenFile)) {
-  $bytes = New-Object byte[] 32
-  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-  $token = [Convert]::ToBase64String($bytes).TrimEnd("=").Replace("+","-").Replace("/","_")
-  Set-Content -Path $tokenFile -Value $token -Encoding ascii
-  Write-Host "Generated token: $token"
-  Write-Host "IMPORTANT: send this token to your AI agent (store it in a secure vault)."
-} else { Write-Host "Token already exists at $tokenFile (unchanged)." }
+# 3) Token — created (or migrated from an old token.txt) by the server
+#    itself, into OS secure storage. The token is never printed.
+$pyInit = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not $pyInit) { $pyInit = (Get-Command py -ErrorAction SilentlyContinue).Source }
+if ($pyInit) {
+  & $pyInit (Join-Path $dest "usage_bridge.py") --init-token
+} else {
+  Write-Warning "Python not found yet; after installing it, run  python `"$dest\usage_bridge.py`" --init-token"
+}
 
 # 4) Autostart (at logon). Tunnel is Tailscale (decided 2026-11-23):
 #    bind the server to this PC's tailnet IPv4 so your agent's VM can reach it
