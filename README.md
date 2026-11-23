@@ -204,7 +204,7 @@ Safety notes:
 
 ### 1. Get the files
 
-Download `usage-bridge-v1.0.0.zip` from the
+Download `usage-bridge-v1.0.1.zip` from the
 [latest release](https://github.com/ervha/usage-bridge/releases/latest)
 and unzip it (or clone this repository). Open PowerShell in that folder.
 
