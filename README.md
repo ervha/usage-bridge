@@ -71,7 +71,7 @@ another machine cannot reach it directly — this program is the bridge
 between the two. When a request arrives, it checks the bearer token,
 asks OpenTokenUsage, and returns the answer (cached for 5 minutes).
 There is no cloud service and no third party: the token lives only in
-`token.txt` on the PC and in your agent's secret store, pairing codes
+the PC's OS secure storage and in your agent's secret store, pairing codes
 exist only as a hash in the process's memory and disappear when it
 restarts, and if the PC is off or asleep, there is simply nothing to
 talk to.
@@ -115,9 +115,10 @@ An agent with shell access can complete the whole setup. Steps:
    It copies the server to the install folder — `~/usage-bridge` by
    default (Windows: `%USERPROFILE%\usage-bridge`); a different folder
    can be chosen (Windows: `-Dest <path>`; Linux / macOS:
-   `USAGE_BRIDGE_HOME=<path>`), and `token.txt` and the autostart
-   registration then live there too. It generates `token.txt` on first
-   run (later runs keep it), binds to the tailnet IPv4, registers
+   `USAGE_BRIDGE_HOME=<path>`), and the token storage and the autostart
+   registration then live there too. It creates the token in OS secure
+   storage on first run (later runs keep it; an old `token.txt` is
+   migrated into secure storage), binds to the tailnet IPv4, registers
    autostart, and health-checks the server.
 5. **Verify locally**: `GET http://<tailnet IPv4>:8787/health` must return
    `{"ok": true, "service": "usage-bridge"}`. If the installer bound to
@@ -134,7 +135,7 @@ An agent with shell access can complete the whole setup. Steps:
    - `tools/call` with `usage_all` → expect a snapshot whose `providers`
      list the user's enabled providers with usage percentages
 
-   A `401` means the token does not match the server's `token.txt`.
+   A `401` means the token does not match the server's stored token.
    An empty reply or timeout means the PC is asleep, the server is not
    running, or the machines are on different tailnets — see
    [Troubleshooting](#troubleshooting) before improvising.
@@ -188,9 +189,9 @@ The installer:
 2. Copies `usage_bridge.py` to the install folder — `%USERPROFILE%\usage-bridge`
    by default; pass `-Dest <path>` to choose another folder
    (`uninstall.ps1` accepts the same `-Dest`)
-3. Generates a bearer token (`token.txt`, shown once — store it in a
-   password manager / secure vault, never commit it, never share it
-   publicly)
+3. Creates the bearer token in OS secure storage (Windows DPAPI, via
+   `--init-token`) — the token is never printed or shown; you hand it
+   over by pairing (see Agent setup)
 4. Binds the server to your PC's tailnet IPv4 (`100.x…`) — falling back to
    `127.0.0.1` with a warning if Tailscale is not signed in yet
 5. Registers logon autostart in your Startup folder (no admin rights
@@ -211,9 +212,11 @@ only relay what OpenTokenUsage can see.
 Invoke-RestMethod http://<tailnet IPv4>:8787/health
 # → {"ok": true, "service": "usage-bridge"}
 
-# Usage (auth required):
-$token = Get-Content ~\usage-bridge\token.txt
-Invoke-RestMethod http://<tailnet IPv4>:8787/usage -Headers @{ Authorization = "Bearer $token" }
+# Usage (auth required): the token lives in OS secure storage, not in a
+# readable file — get it the same way an agent does, by pairing:
+#   python ~\usage-bridge\usage_bridge.py --pair     (note the code)
+#   POST /pair/redeem with {"code": "..."}           (returns the token once)
+# then call /usage with  Authorization: Bearer <token>
 ```
 
 From the agent's machine, repeat the health check to confirm the tailnet
@@ -256,8 +259,9 @@ The installer:
 1. Copies `usage_bridge.py` to the install folder — `~/usage-bridge` by
    default; set `USAGE_BRIDGE_HOME=<path>` to choose another folder
    (`uninstall.sh` reads the same variable)
-2. Generates a bearer token (`token.txt`, mode `600`, shown once — store
-   it in a password manager / secure vault, never commit it)
+2. Creates the bearer token in OS secure storage (macOS Keychain /
+   Linux Secret Service, via `--init-token`; falls back to `token.txt`
+   mode `600` where no secret service is available) — never printed
 3. Binds the server to your tailnet IPv4 (`100.x…`) — falling back to
    `127.0.0.1` with a warning if Tailscale is not signed in yet
 4. Registers autostart — systemd user service on Linux
@@ -274,7 +278,7 @@ The installer:
 curl http://<tailnet IPv4>:8787/health
 # → {"ok": true, "service": "usage-bridge"}
 curl http://<tailnet IPv4>:8787/usage \
-  -H "Authorization: Bearer $(cat ~/usage-bridge/token.txt)"
+  -H "Authorization: Bearer <token obtained by pairing — see Agent setup>"
 ```
 
 ### Manual run (instead of the installer)
@@ -287,9 +291,10 @@ python3 usage_bridge.py --host 127.0.0.1 --port 8787
 
 Download the new release zip, unzip it, and run the installer again
 (`install.ps1` on Windows, `install.sh` on Linux / macOS).
-Your existing `token.txt` is kept, the old server process is stopped
+Your existing token is kept (an old `token.txt` is migrated into OS
+secure storage by the re-run), the old server process is stopped
 first, and autostart is re-registered against your current tailnet IPv4.
-No other state is stored, so there is nothing to migrate.
+No other state is stored, so there is nothing else to migrate.
 
 ## Connecting an MCP client
 
@@ -349,8 +354,13 @@ one more moving part for little gain — skip it.
 
 - **Never port-forward port 8787 to the internet.** Reach it only inside
   your tailnet (or another private tunnel you control).
-- Always set a token (`USAGE_BRIDGE_TOKEN` env var or `token.txt`). Without
-  one, auth is disabled and the server must stay on `127.0.0.1` only.
+- Always set a token (the installers store it in OS secure storage —
+  Windows DPAPI, macOS Keychain, Linux Secret Service; the
+  `USAGE_BRIDGE_TOKEN` env var or a `token.txt` fallback also work).
+  Without one, auth is disabled and the server must stay on `127.0.0.1`
+  only. If you prefer the token never be stored at all, run the server
+  with `USAGE_BRIDGE_EPHEMERAL=1`: it then lives only in memory and
+  changes on every restart, so agents pair again after each restart.
 - Hand the token over by **pairing**, not by sending the token itself:
   `usage_bridge.py --pair` on the PC mints an 8-character code, valid
   10 minutes, single use, burned after 5 wrong guesses. Codes can only
@@ -385,9 +395,10 @@ one more moving part for little gain — skip it.
 ## Uninstall
 
 On Linux / macOS, run `sh ./uninstall.sh` — it stops the server, removes
-the autostart registration (systemd user service / launchd agent) and
-deletes `~/usage-bridge`. Then remove the MCP entry from your agent's
-configuration, as in step 4 below.
+the autostart registration (systemd user service / launchd agent),
+removes the token from OS secure storage, and deletes `~/usage-bridge`.
+Then remove the MCP entry from your agent's configuration, as in step 4
+below.
 
 On Windows, run `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1`
 — it stops the server, removes the Startup entry and deletes
@@ -405,8 +416,8 @@ configuration, as in step 4 below. To do it by hand instead:
 2. Remove the autostart entry: delete `usage-bridge.cmd` from your
    Startup folder (`shell:startup` in Explorer's address bar opens it).
 3. Delete the install folder: `%USERPROFILE%\usage-bridge`
-   (this also deletes `token.txt` — the token is then useless to anyone,
-   because the server is gone).
+   (this also deletes the DPAPI-encrypted token file — and the token is
+   useless to anyone once the server is gone).
 4. Remove the MCP entry / endpoint from your agent's configuration, so
    the agent stops trying to reach the bridge.
 5. Optional, only if you installed them for this: uninstall
@@ -420,7 +431,7 @@ configuration, as in step 4 below. To do it by hand instead:
 |---|---|
 | Health check fails right after install | Python not on PATH, or port 8787 already in use. Re-run the installer (it stops older usage-bridge processes first). |
 | Installer warns “Tailscale IPv4 not found” | Tailscale is not signed in yet. Sign in, then re-run the installer so it rebinds to the tailnet address. |
-| `401 unauthorized` from the agent | Token mismatch. Use the exact contents of `%USERPROFILE%\usage-bridge\token.txt` as the Bearer token. |
+| `401 unauthorized` from the agent | Token mismatch. The token lives in OS secure storage, not a readable file — re-pair: run `--pair` on the PC and redeem the fresh code. |
 | Agent gets an empty reply | Fixed in v1.0.0: windowless (`pythonw`) startup no longer breaks responses. Make sure you are not running an older copy — re-run the installer. |
 | `OpenTokenUsage local API unreachable` | OpenTokenUsage is not running, or no provider is enabled. Open it once and check its tray icon. |
 | Nothing answers at all | The PC is asleep/off, or the agent is on a different tailnet. Wake the PC and check `tailscale status` on both machines. |
