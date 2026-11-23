@@ -2,6 +2,10 @@
 
 [日本語版 README](README.ja.md)
 
+![release](https://img.shields.io/github/v/release/ervha/usage-bridge) ![downloads](https://img.shields.io/github/downloads/ervha/usage-bridge/total) ![license](https://img.shields.io/github/license/ervha/usage-bridge)
+
+[Download](https://github.com/ervha/usage-bridge/releases/latest) · [Changelog](CHANGELOG.md) · [Report a problem](https://github.com/ervha/usage-bridge/issues)
+
 **Ask your AI agent “how much is left?” — and let it manage the quotas itself.**
 
 Every AI coding subscription (Claude, Codex, Antigravity, Grok, …) has its
