@@ -110,7 +110,13 @@ def handle_rpc(msg):
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+        # Under pythonw.exe sys.stderr is None; writing there would kill the
+        # handler before the response is sent (client sees an empty reply).
+        if sys.stderr is not None:
+            try:
+                sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+            except Exception:
+                pass
 
     def _authed(self):
         if not TOKEN:
@@ -154,6 +160,11 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, json.dumps(resp, ensure_ascii=False))
 
 def main():
+    # pythonw.exe leaves std streams as None; give the process real sinks.
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8787)

@@ -2,7 +2,7 @@
 # 1) Installs OpenTokenUsage if missing (winget)
 # 2) Copies usage_bridge.py to %USERPROFILE%\usage-bridge
 # 3) Generates a bearer token (token.txt, shown once at the end — send it to your AI agent)
-# 4) Registers logon autostart via Task Scheduler
+# 4) Registers logon autostart via the Startup folder (no admin rights needed)
 # 5) Starts the server and checks /health
 $ErrorActionPreference = "Stop"
 $dest = Join-Path $env:USERPROFILE "usage-bridge"
@@ -47,19 +47,31 @@ if ($bindHost -eq "127.0.0.1") {
   Write-Warning "Tailscale IPv4 not found. The server will listen on 127.0.0.1 only."
   Write-Warning "Sign in to Tailscale, then re-run this script so it rebinds to the tailnet address."
 } else { Write-Host "Binding usage-bridge to tailnet address $bindHost" }
-$py = (Get-Command python).Source
+$py = (Get-Command pythonw -ErrorAction SilentlyContinue).Source
+if (-not $py) { $py = (Get-Command python).Source }
 if (-not $py) { $py = (Get-Command py).Source }
-$action = New-ScheduledTaskAction -Execute $py -Argument "`"$dest\usage_bridge.py`" --port 8787 --host $bindHost" -WorkingDirectory $dest
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName "usage-bridge" -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-Write-Host "Registered Task Scheduler job 'usage-bridge' (starts at logon)."
+# Autostart via the user's Startup folder (no admin rights needed;
+# Task Scheduler registration requires elevation and is not used).
+$launcher = Join-Path $dest "start-usage-bridge.cmd"
+@"
+@echo off
+cd /d "$dest"
+start "" /min "$py" "$dest\usage_bridge.py" --port 8787 --host $bindHost
+"@ | Set-Content -Path $launcher -Encoding ascii
+$startup = [Environment]::GetFolderPath("Startup")
+Copy-Item $launcher (Join-Path $startup "usage-bridge.cmd") -Force
+Write-Host "Registered autostart in the Startup folder (starts at logon, no admin needed)."
 
-# 5) Start now + health check
-Start-ScheduledTask -TaskName "usage-bridge"
+# 5) Start now + health check (stop any older usage-bridge process first,
+#    otherwise the old one keeps holding port 8787)
+Get-CimInstance Win32_Process -Filter "Name like 'python%'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.CommandLine -like "*usage_bridge.py*" } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 1
+& $launcher
 Start-Sleep -Seconds 3
 try {
-  $h = Invoke-RestMethod -Uri "http://127.0.0.1:8787/health" -TimeoutSec 5
+  $h = Invoke-RestMethod -Uri "http://${bindHost}:8787/health" -TimeoutSec 5
   Write-Host "usage-bridge health: $($h | ConvertTo-Json -Compress)"
 } catch { Write-Warning "Health check failed: $_  (check that Python is installed and port 8787 is free)" }
 

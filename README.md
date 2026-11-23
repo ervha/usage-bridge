@@ -61,7 +61,10 @@ The installer:
    password manager / secure vault, never commit it)
 4. Binds the server to your PC's tailnet IPv4 (`100.x…`) — falling back to
    `127.0.0.1` with a warning if Tailscale is not signed in yet
-5. Registers a logon autostart task and health-checks `GET /health`
+5. Registers logon autostart in your Startup folder (no admin rights
+   needed; the server launches windowless via `pythonw`) and health-checks
+   `GET /health`. Re-running the installer first stops any older
+   usage-bridge process, so a stale copy cannot keep holding port 8787.
 
 Then, in OpenTokenUsage, enable the providers you use and confirm they are
 signed in.
@@ -114,8 +117,8 @@ Plain-JSON debugging endpoints: `GET /health`, `GET /usage` (auth required).
 
 ## Uninstall
 
-Disable or delete the `usage-bridge` scheduled task, then delete
-`%USERPROFILE%\usage-bridge`.
+Remove `usage-bridge.cmd` from your Startup folder, stop any running
+`usage_bridge.py` process, then delete `%USERPROFILE%\usage-bridge`.
 
 ## Related projects — and how this differs
 
