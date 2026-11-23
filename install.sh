@@ -2,7 +2,9 @@
 # usage-bridge installer for Linux / macOS
 # 1) Copies usage_bridge.py to the install folder
 #    (default ~/usage-bridge; choose another by setting USAGE_BRIDGE_HOME)
-# 2) Generates a bearer token (token.txt, mode 600, shown once at the end)
+# 2) Creates the bearer token in OS secure storage (macOS Keychain /
+#    Linux Secret Service; falls back to token.txt, mode 600).
+#    The token itself is never printed — hand it over with pairing.
 # 3) Registers autostart (systemd --user on Linux, launchd on macOS)
 # 4) Starts the server and checks /health
 # No sudo needed. Re-running is safe: the token is kept, the old process is stopped first.
@@ -20,17 +22,9 @@ PY=$(command -v python3)
 # 1) Server file
 cp "$SRC_DIR/usage_bridge.py" "$DEST/usage_bridge.py"
 
-# 2) Token
-TOKEN_FILE="$DEST/token.txt"
-if [ ! -f "$TOKEN_FILE" ]; then
-  TOKEN=$("$PY" -c "import secrets; print(secrets.token_urlsafe(32))")
-  (umask 077; printf '%s' "$TOKEN" > "$TOKEN_FILE")
-  echo "Generated token: $TOKEN"
-  echo "IMPORTANT: send this token to your agent (store it in its secure vault)."
-else
-  echo "Token already exists at $TOKEN_FILE (unchanged)."
-fi
-chmod 600 "$TOKEN_FILE"
+# 2) Token — created (or migrated from an old token.txt) by the server
+#    itself, into OS secure storage. The token is never printed.
+"$PY" "$DEST/usage_bridge.py" --init-token
 
 # Tunnel is Tailscale: bind to this machine's tailnet IPv4 when available,
 # so the agent's machine can reach the server through the tailnet only.
