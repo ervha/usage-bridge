@@ -1,11 +1,14 @@
 # usage-bridge installer for your PC (Windows 11, PowerShell)
 # 1) Installs OpenTokenUsage if missing (winget)
-# 2) Copies usage_bridge.py to %USERPROFILE%\usage-bridge
+# 2) Copies usage_bridge.py to the install folder
+#    (default %USERPROFILE%\usage-bridge; choose another with -Dest <path>)
 # 3) Generates a bearer token (token.txt, shown once at the end — send it to your AI agent)
 # 4) Registers logon autostart via the Startup folder (no admin rights needed)
 # 5) Starts the server and checks /health
+param([string]$Dest = (Join-Path $env:USERPROFILE "usage-bridge"))
 $ErrorActionPreference = "Stop"
-$dest = Join-Path $env:USERPROFILE "usage-bridge"
+$dest = $Dest
+Write-Host "Installing usage-bridge to $dest"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 # 1) OpenTokenUsage
@@ -79,4 +82,4 @@ Write-Host ""
 Write-Host "Next steps:"
 Write-Host " 1) Open OpenTokenUsage once and sign in / enable the providers you use (Claude, Codex, Antigravity, Grok)."
 Write-Host " 2) Make sure Tailscale is signed in on this PC (same account as your agent's VM)."
-Write-Host " 3) Hand the token over securely: run  python ~\usage-bridge\usage_bridge.py --pair  and give your agent the 8-character pairing code (valid 10 minutes, single use) plus this PC's tailnet IPv4 (tailscale ip -4). The agent redeems the code for the token, so the token itself never travels."
+Write-Host " 3) Hand the token over securely: run  python `"$dest\usage_bridge.py`" --pair  and give your agent the 8-character pairing code (valid 10 minutes, single use) plus this PC's tailnet IPv4 (tailscale ip -4). The agent redeems the code for the token, so the token itself never travels."
