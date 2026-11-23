@@ -1,7 +1,7 @@
 # usage-bridge uninstaller for Windows (PowerShell)
 # 1) Stops the running server
 # 2) Removes the Startup-folder autostart entry
-# 3) Deletes the install folder (including token.txt)
+# 3) Deletes the install folder (including the stored token)
 #    Default %USERPROFILE%\usage-bridge; if you installed elsewhere,
 #    pass the same folder with -Dest <path>.
 # No admin rights needed. OpenTokenUsage / Tailscale are NOT removed;
