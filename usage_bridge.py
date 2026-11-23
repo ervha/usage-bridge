@@ -15,7 +15,7 @@ Usage:
 Bind to 127.0.0.1 by default; expose it only through a tunnel (Tailscale /
 Cloudflare Tunnel) — never port-forward it directly to the internet.
 """
-import argparse, json, os, sys, time, urllib.request, urllib.error
+import argparse, hashlib, hmac, json, os, secrets, sys, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 UPSTREAM = os.environ.get("USAGE_BRIDGE_UPSTREAM", "http://127.0.0.1:6736")
@@ -33,6 +33,40 @@ def load_token():
     return ""
 
 TOKEN = load_token()
+
+# --- Secure token handover (pairing) ---------------------------------------
+# The long-lived token never has to travel through chat or email. Someone on
+# this PC creates a short-lived, single-use pairing code (POST /pair/create,
+# loopback only, or `usage_bridge.py --pair`); the agent redeems it once via
+# POST /pair/redeem from inside the tailnet and stores the token in its own
+# secret store. Codes expire in PAIR_TTL seconds and burn after
+# PAIR_MAX_ATTEMPTS wrong guesses.
+PAIR_TTL = 600
+PAIR_MAX_ATTEMPTS = 5
+PAIR_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no ambiguous characters
+_pair = {"digest": None, "expires": 0.0, "attempts": 0}
+_pair_lock = threading.Lock()
+
+def _new_pair_code():
+    code = "".join(secrets.choice(PAIR_ALPHABET) for _ in range(8))
+    with _pair_lock:
+        _pair["digest"] = hashlib.sha256(code.encode()).hexdigest()
+        _pair["expires"] = time.time() + PAIR_TTL
+        _pair["attempts"] = 0
+    return code
+
+def _redeem_pair_code(code):
+    digest = hashlib.sha256((code or "").strip().upper().encode()).hexdigest()
+    with _pair_lock:
+        if not _pair["digest"] or time.time() > _pair["expires"]:
+            return None
+        if _pair["attempts"] >= PAIR_MAX_ATTEMPTS:
+            return None
+        if hmac.compare_digest(digest, _pair["digest"]):
+            _pair["digest"] = None  # single use
+            return TOKEN
+        _pair["attempts"] += 1
+        return None
 
 def fetch_usage(provider=None, force=False):
     now = time.time()
@@ -121,7 +155,8 @@ class Handler(BaseHTTPRequestHandler):
     def _authed(self):
         if not TOKEN:
             return True  # local-only mode when no token configured
-        return self.headers.get("Authorization", "") == f"Bearer {TOKEN}"
+        return hmac.compare_digest(
+            self.headers.get("Authorization", ""), f"Bearer {TOKEN}")
 
     def _send(self, code, body, ctype="application/json"):
         raw = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -145,6 +180,27 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
+        if self.path == "/pair/create":
+            if self.client_address[0] not in ("127.0.0.1", "::1"):
+                return self._send(403, json.dumps(
+                    {"error": "pairing codes can only be created on this PC"}))
+            if not TOKEN:
+                return self._send(400, json.dumps(
+                    {"error": "no token configured on the server"}))
+            code = _new_pair_code()
+            return self._send(200, json.dumps(
+                {"code": code, "expiresInSeconds": PAIR_TTL}))
+        if self.path == "/pair/redeem":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+            except Exception:
+                return self._send(400, json.dumps({"error": "bad request"}))
+            token = _redeem_pair_code(body.get("code", ""))
+            if token:
+                return self._send(200, json.dumps({"token": token}))
+            return self._send(401, json.dumps(
+                {"error": "invalid or expired pairing code"}))
         if self.path != "/mcp":
             return self._send(404, json.dumps({"error": "not found"}))
         if not self._authed():
@@ -168,7 +224,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8787)
+    ap.add_argument("--pair", action="store_true",
+                    help="create a one-time pairing code on the running server and exit")
     a = ap.parse_args()
+    if a.pair:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{a.port}/pair/create", data=b"", method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                out = json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            sys.stderr.write(f"Could not create a pairing code: {e}\n"
+                             "Is usage-bridge running on this PC?\n")
+            return
+        print(f"Pairing code: {out['code']}")
+        print(f"Valid for {out['expiresInSeconds'] // 60} minutes, single use.")
+        print("Give this code to your agent (not the token). "
+              "The agent redeems it for the token and stores the token in its secret store.")
+        return
     if not TOKEN:
         sys.stderr.write("WARNING: no token configured (USAGE_BRIDGE_TOKEN or token.txt). "
                          "Auth is disabled — keep the bind on 127.0.0.1.\n")
