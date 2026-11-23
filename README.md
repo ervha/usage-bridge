@@ -2,7 +2,7 @@
 
 [日本語版 README](README.ja.md)
 
-[Download](https://github.com/ervha/usage-bridge/releases/latest) · [Changelog](CHANGELOG.md) · [Report a problem](https://github.com/ervha/usage-bridge/issues)
+[Download](https://github.com/ervha/usage-bridge-for-agents/releases/latest) · [Changelog](CHANGELOG.md) · [Report a problem](https://github.com/ervha/usage-bridge-for-agents/issues)
 
 **Ask your AI agent “how much is left?” — and let it manage the quotas itself.**
 
@@ -137,7 +137,7 @@ parts only a person can do.
    `127.0.0.1`; re-run it after sign-in so it rebinds to the tailnet
    IPv4.
 3. **Get the files**: download the latest release zip from
-   [Releases](https://github.com/ervha/usage-bridge/releases/latest)
+   [Releases](https://github.com/ervha/usage-bridge-for-agents/releases/latest)
    and unzip it, or clone this repository. Work inside that folder.
 4. **Run the installer** (idempotent — safe to re-run):
    - Windows: `powershell -ExecutionPolicy Bypass -File .\install.ps1`
@@ -205,7 +205,7 @@ Safety notes:
 ### 1. Get the files
 
 Download `usage-bridge-v1.0.1.zip` from the
-[latest release](https://github.com/ervha/usage-bridge/releases/latest)
+[latest release](https://github.com/ervha/usage-bridge-for-agents/releases/latest)
 and unzip it (or clone this repository). Open PowerShell in that folder.
 
 ### 2. Run the installer
@@ -276,7 +276,7 @@ python usage_bridge.py --host 127.0.0.1 --port 8787
 ### 1. Get the files
 
 Download the latest release zip from
-[Releases](https://github.com/ervha/usage-bridge/releases/latest) and
+[Releases](https://github.com/ervha/usage-bridge-for-agents/releases/latest) and
 unzip it (or clone this repository). Open a terminal in that folder.
 
 ### 2. Run the installer
