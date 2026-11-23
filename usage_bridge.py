@@ -7,7 +7,8 @@ Runs on your PC (stdlib only, no pip installs).
     usage_all       -> snapshots for all enabled providers
     usage_provider  -> one provider by id (e.g. "claude", "codex", "antigravity", "grok")
 - Also serves GET /health and GET /usage (plain JSON, for local debugging)
-- Auth: bearer token from env USAGE_BRIDGE_TOKEN or ./token.txt next to this file
+- Auth: bearer token from OS secure storage (DPAPI / Keychain / Secret
+  Service), env USAGE_BRIDGE_TOKEN, or ./token.txt — see --init-token
 - Cache: 300s. On upstream error, serves the last good snapshot marked stale.
 
 Usage:
@@ -15,7 +16,7 @@ Usage:
 Bind to 127.0.0.1 by default; expose it only through a tunnel (Tailscale /
 Cloudflare Tunnel) — never port-forward it directly to the internet.
 """
-import argparse, hashlib, hmac, json, os, secrets, sys, threading, time, urllib.request, urllib.error
+import argparse, hashlib, hmac, json, os, secrets, subprocess, sys, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 UPSTREAM = os.environ.get("USAGE_BRIDGE_UPSTREAM", "http://127.0.0.1:6736")
@@ -23,16 +24,105 @@ CACHE_TTL = 300
 
 _cache = {"at": 0.0, "data": None}
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TOKEN_TXT = os.path.join(BASE_DIR, "token.txt")
+TOKEN_DPAPI = os.path.join(BASE_DIR, "token.dpapi")
+
+# --- Token storage ----------------------------------------------------------
+# The token survives restarts, but preferably not as plain text on disk:
+#   Windows: a DPAPI-encrypted file (token.dpapi) — only this Windows user
+#            can decrypt it.
+#   macOS:   a Keychain entry ("usage-bridge") via the `security` CLI.
+#   Linux:   the Secret Service via `secret-tool`, when available.
+# Fallback: token.txt with owner-only permissions. A failure in the secure
+# store always falls back instead of locking you out. Set
+# USAGE_BRIDGE_EPHEMERAL=1 to skip storage entirely (memory-only token that
+# changes on every restart; agents then pair again after each restart).
+
+def _dpapi(data, protect):
+    import ctypes
+    from ctypes import wintypes
+
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD),
+                    ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    buf = ctypes.create_string_buffer(data, len(data))
+    blob_in = DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    blob_out = DATA_BLOB()
+    fn = (ctypes.windll.crypt32.CryptProtectData if protect
+          else ctypes.windll.crypt32.CryptUnprotectData)
+    if not fn(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
+        raise OSError("DPAPI call failed")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+
+def _secure_load():
+    try:
+        if sys.platform == "win32" and os.path.exists(TOKEN_DPAPI):
+            return _dpapi(open(TOKEN_DPAPI, "rb").read(), False).decode("utf-8").strip()
+        if sys.platform == "darwin":
+            r = subprocess.run(["security", "find-generic-password", "-s", "usage-bridge",
+                                "-a", "token", "-w"],
+                               capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                return r.stdout.strip()
+        if sys.platform.startswith("linux"):
+            r = subprocess.run(["secret-tool", "lookup", "service", "usage-bridge",
+                                "account", "token"],
+                               capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                return r.stdout.strip()
+    except Exception:
+        return None
+    return None
+
+def _secure_save(tok):
+    """Store tok in the OS-protected store. Returns a label, or None."""
+    try:
+        if sys.platform == "win32":
+            with open(TOKEN_DPAPI, "wb") as f:
+                f.write(_dpapi(tok.encode("utf-8"), True))
+            return "Windows DPAPI (token.dpapi)"
+        if sys.platform == "darwin":
+            r = subprocess.run(["security", "add-generic-password", "-s", "usage-bridge",
+                                "-a", "token", "-w", tok, "-U"],
+                               capture_output=True, text=True, timeout=10)
+            return "macOS Keychain" if r.returncode == 0 else None
+        if sys.platform.startswith("linux"):
+            r = subprocess.run(["secret-tool", "store", "--label=usage-bridge",
+                                "service", "usage-bridge", "account", "token"],
+                               input=tok, capture_output=True, text=True, timeout=10)
+            return "Linux Secret Service" if r.returncode == 0 else None
+    except Exception:
+        return None
+    return None
+
+def _file_save(tok):
+    with open(TOKEN_TXT, "w", encoding="utf-8") as f:
+        f.write(tok + "\n")
+    try:
+        os.chmod(TOKEN_TXT, 0o600)
+    except Exception:
+        pass
+    return "token.txt (owner-only permissions)"
+
 def load_token():
+    if os.environ.get("USAGE_BRIDGE_EPHEMERAL", "") == "1":
+        return secrets.token_urlsafe(32), "memory only (ephemeral)"
     tok = os.environ.get("USAGE_BRIDGE_TOKEN", "").strip()
     if tok:
-        return tok
-    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "token.txt")
-    if os.path.exists(p):
-        return open(p, encoding="utf-8").read().strip()
-    return ""
+        return tok, "environment variable"
+    tok = _secure_load()
+    if tok:
+        return tok, "OS secure storage"
+    if os.path.exists(TOKEN_TXT):
+        return open(TOKEN_TXT, encoding="utf-8").read().strip(), "token.txt"
+    return "", "none"
 
-TOKEN = load_token()
+TOKEN, TOKEN_SOURCE = load_token()
 
 # --- Secure token handover (pairing) ---------------------------------------
 # The long-lived token never has to travel through chat or email. Someone on
@@ -226,7 +316,28 @@ def main():
     ap.add_argument("--port", type=int, default=8787)
     ap.add_argument("--pair", action="store_true",
                     help="create a one-time pairing code on the running server and exit")
+    ap.add_argument("--init-token", action="store_true",
+                    help="create the token in OS secure storage (or migrate token.txt into it) and exit")
     a = ap.parse_args()
+    if a.init_token:
+        if TOKEN and TOKEN_SOURCE == "token.txt":
+            where = _secure_save(TOKEN)
+            if where:
+                os.remove(TOKEN_TXT)
+                print(f"Existing token moved into secure storage: {where}. token.txt deleted.")
+            else:
+                print("Secure storage is not available on this system; "
+                      "the token stays in token.txt.")
+            return
+        if TOKEN:
+            print(f"A token already exists ({TOKEN_SOURCE}); nothing to do.")
+            return
+        new_tok = secrets.token_urlsafe(32)
+        where = _secure_save(new_tok) or _file_save(new_tok)
+        print(f"Token created and stored in: {where}")
+        print("The token itself is never printed. Hand it to your agent with "
+              "pairing: run this file with --pair while the server is running.")
+        return
     if a.pair:
         req = urllib.request.Request(
             f"http://127.0.0.1:{a.port}/pair/create", data=b"", method="POST")
@@ -243,10 +354,11 @@ def main():
               "The agent redeems it for the token and stores the token in its secret store.")
         return
     if not TOKEN:
-        sys.stderr.write("WARNING: no token configured (USAGE_BRIDGE_TOKEN or token.txt). "
+        sys.stderr.write("WARNING: no token configured. Run with --init-token to create one. "
                          "Auth is disabled — keep the bind on 127.0.0.1.\n")
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     sys.stderr.write(f"usage-bridge listening on {a.host}:{a.port} (upstream {UPSTREAM})\n")
+    sys.stderr.write(f"token source: {TOKEN_SOURCE}\n")
     srv.serve_forever()
 
 if __name__ == "__main__":
