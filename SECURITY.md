@@ -18,6 +18,20 @@ Treat it like any other internal service:
   never reads, stores, or forwards those credentials; it only relays the
   aggregated usage JSON from the local API.
 
+## Where things live
+
+- The “server” is the `usage_bridge.py` process on your own PC — there is
+  no hosted service and no third party in the path.
+- The token exists in exactly two places: `token.txt` on the PC and your
+  agent's secret store.
+- Pairing codes are never stored as-is. The server keeps only a SHA-256
+  hash, an expiry (10 minutes) and a failure counter, all in process
+  memory; restarting the server erases them. A redeemed or expired code
+  cannot be used again.
+- The bridge never reads, stores, or forwards your provider credentials
+  (those stay inside OpenTokenUsage) and sends nothing anywhere except
+  back to the agent that asked, inside your tailnet.
+
 To report a vulnerability, please open a private report via the repository's
 security advisories, or contact the maintainer directly instead of filing a
 public issue.
