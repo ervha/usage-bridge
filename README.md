@@ -29,10 +29,20 @@ privately over [Tailscale](https://tailscale.com/).
 up end to end.** Follow [Agent setup](#agent-setup-all-platforms) exactly,
 in order. You may run every command yourself. Ask the user only for the
 things you cannot do: signing in to Tailscale and to each provider, and
-handing you the token through a secure channel (never in plain chat if a
-secure option exists). When you are done, report the endpoint, the
+starting the token handover — the user runs
+`python ~\usage-bridge\usage_bridge.py --pair` on the PC (Linux / macOS:
+`python3 ~/usage-bridge/usage_bridge.py --pair`) and gives you the
+8-character pairing code; you redeem it and store the token in your
+secret store, so the long-lived token never travels through chat. When
+you are done, report the endpoint, the
 providers you can see, and one sample reading — that is the success
 criterion.
+
+**Optional: take the companion skill.** [skill/SKILL.md](skill/SKILL.md)
+teaches an agent how to *use* the bridge well after setup — when to check
+quotas, how to present them, how to turn them into model choices, and the
+token-handling rules. Drop it into your agent's skills folder (or paste it
+into its instructions) and quota checks become a habit instead of a chore.
 
 ## How it works
 
@@ -87,7 +97,7 @@ An agent with shell access can complete the whole setup. Steps:
 4. **Run the installer** (idempotent — safe to re-run):
    - Windows: `powershell -ExecutionPolicy Bypass -File .\install.ps1`
    - Linux / macOS: `sh ./install.sh`
-   
+
    It copies the server to `~/usage-bridge` (Windows:
    `%USERPROFILE%\usage-bridge`), generates `token.txt` on first run
    (later runs keep it), binds to the tailnet IPv4, registers autostart,
@@ -96,14 +106,17 @@ An agent with shell access can complete the whole setup. Steps:
    `{"ok": true, "service": "usage-bridge"}`. If the installer bound to
    `127.0.0.1` instead, Tailscale sign-in is missing — fix that first.
 6. **Verify the MCP surface** from the machine where the agent runs.
-   Read the token from `token.txt` inside your own process or secret
-   store — **never print it in chat, logs, commits, or screenshots, and
-   never pass it as a plain command-line argument if your environment
-   protects secret values**. Then send:
+   First redeem the pairing code (step 4's handover): ask the user to
+   run the `--pair` command on the PC and send you the 8-character
+   code, then `POST http://<tailnet IPv4>:8787/pair/redeem` with
+   `{"code": "..."}` and store the returned token in your secret
+   store. **Never print the token in chat, logs, commits, or
+   screenshots, and never pass it as a plain command-line argument if
+   your environment protects secret values**. Then send:
    - `initialize` → expect a JSON-RPC result naming server `usage-bridge`
    - `tools/call` with `usage_all` → expect a snapshot whose `providers`
      list the user's enabled providers with usage percentages
-   
+
    A `401` means the token does not match the server's `token.txt`.
    An empty reply or timeout means the PC is asleep, the server is not
    running, or the machines are on different tailnets — see
@@ -115,6 +128,11 @@ An agent with shell access can complete the whole setup. Steps:
 8. **Report to the user**: the endpoint URL, the providers visible, one
    current reading (e.g. “Claude weekly 13%, resets Fri 04:00”), and the
    one operational caveat — readings are unavailable while the PC sleeps.
+9. **Ask how they want quotas allocated.** Which pools are for bulk
+   work, which models to preserve and for what, any hard rules. Record
+   the answers as the user's routing policy in your memory or config,
+   and read back a short summary for confirmation. Later model choices
+   follow that policy — see [skill/SKILL.md](skill/SKILL.md).
 
 Guardrails for agents:
 
@@ -224,8 +242,10 @@ The installer:
 4. Registers autostart — systemd user service on Linux
    (`~/.config/systemd/user/usage-bridge.service`), launchd agent on
    macOS (`~/Library/LaunchAgents/com.usagebridge.server.plist`) — and
-   health-checks `GET /health`. Re-running first stops any older
-   usage-bridge process.
+   health-checks `GET /health`. On a Linux system without a user
+   systemd session it falls back to starting the server in the
+   background (no autostart) and says so. Re-running first stops any
+   older usage-bridge process.
 
 ### 3. Verify
 
@@ -310,6 +330,11 @@ one more moving part for little gain — skip it.
   your tailnet (or another private tunnel you control).
 - Always set a token (`USAGE_BRIDGE_TOKEN` env var or `token.txt`). Without
   one, auth is disabled and the server must stay on `127.0.0.1` only.
+- Hand the token over by **pairing**, not by sending the token itself:
+  `usage_bridge.py --pair` on the PC mints an 8-character code, valid
+  10 minutes, single use, burned after 5 wrong guesses. Codes can only
+  be created from the PC itself (loopback); redemption happens inside
+  the tailnet and returns the token exactly once.
 - The bridge is **read-only**. It has no write tools.
 - Usage data stays between your PC and your agent. Nothing is sent to any
   third-party service by this code.
